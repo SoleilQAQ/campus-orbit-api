@@ -1,7 +1,7 @@
 import os
 import pytest
 
-from app.clients.weather_clients import OpenWeatherClient
+from app.clients.weather_client import OpenWeatherClient
 
 pytestmark = pytest.mark.integration
 

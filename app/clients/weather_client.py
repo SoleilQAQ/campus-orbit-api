@@ -1,4 +1,4 @@
-# app/clients/weather_clients.py
+# app/clients/weather_client.py
 from __future__ import annotations
 
 from typing import Dict, Any

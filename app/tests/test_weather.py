@@ -1,6 +1,6 @@
 import pytest
 
-from app.clients.weather_clients import OpenWeatherClient
+from app.clients.weather_client import OpenWeatherClient
 from app.services.weather_service import WeatherService
 
 

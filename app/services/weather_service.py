@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.weather_clients import BackupWeatherClient, OpenWeatherClient
+from app.clients.weather_client import BackupWeatherClient, OpenWeatherClient
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.weather_db import WeatherCache, WeatherSnapshot
