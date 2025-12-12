@@ -9,3 +9,11 @@ GET http://127.0.0.1:8000/hello/User
 Accept: application/json
 
 ###
+### 教务登录（当前一定会返回 false + TODO 提示）
+POST http://127.0.0.1:8000/api/jwxt/login
+Content-Type: application/json
+
+{
+  "username": "你的学号",
+  "password": "你的密码"
+}

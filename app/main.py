@@ -8,6 +8,7 @@ from fastapi.exceptions import RequestValidationError
 
 from app.api.weather import router as weather_router
 from app.api.health import router as health_router
+from app.api import jwxt     # 新加
 from app.core.errors import http_exception_handler, validation_exception_handler
 from app.middlewares.request_id import request_id_middleware
 
@@ -37,12 +38,8 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler) 
 # routers
 app.include_router(weather_router)
 app.include_router(health_router)
-
+app.include_router(jwxt.router)
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "message": "FastAPI is running!"}
-
-
-# 挂载天气路由
-app.include_router(weather_router)
