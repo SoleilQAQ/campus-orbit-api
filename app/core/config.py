@@ -30,11 +30,21 @@ class Settings(BaseSettings):
     )
 
     # ==== 教务系统相关配置 ====
-    academic_base_url: str = Field(..., alias="ACADEMIC_BASE_URL")
-    academic_insecure_ssl: bool = Field(True, alias="ACADEMIC_INSECURE_SSL")
-    academic_connect_timeout: float = Field(10.0, alias="ACADEMIC_CONNECT_TIMEOUT")
-    academic_read_timeout: float = Field(20.0, alias="ACADEMIC_READ_TIMEOUT")
-
+    # === 教务系统（academic） ===
+    academic_base_url: str = Field(
+        "http://ysjw.sdufe.edu.cn:8081",   # 默认用这个地址
+        alias="ACADEMIC_BASE_URL",
+    )
+    academic_insecure_ssl: bool = Field(
+        True,  # http 下其实无所谓，保留开关以后随时改成 https 也方便
+        alias="ACADEMIC_INSECURE_SSL",
+    )
+    academic_connect_timeout: float = Field(
+        10.0, alias="ACADEMIC_CONNECT_TIMEOUT"
+    )
+    academic_read_timeout: float = Field(
+        20.0, alias="ACADEMIC_READ_TIMEOUT"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
