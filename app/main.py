@@ -1,8 +1,8 @@
 # app/main.py
 from contextlib import asynccontextmanager
 
-import httpx # aiohttp
-from fastapi import FastAPI
+import httpx # httpx/aiohttp/request
+from fastapi import FastAPI # django/flask/Sanic/Robyn
 from app.api.weather import router as weather_router
 
 

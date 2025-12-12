@@ -1,40 +1,33 @@
 # app/services/weather_service.py
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
 import logging
+from datetime import datetime, timezone, timedelta
 
 import httpx
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients.weather_clients import (
-    OpenWeatherClient,
-    BackupWeatherClient,
-)
+from app.clients.weather_clients import BackupWeatherClient, OpenWeatherClient
 from app.core.config import settings
-from app.models.weather_db import WeatherSnapshot, WeatherCache
+from app.models.weather_db import WeatherCache, WeatherSnapshot
 from app.models.weather_schemas import (
-    WeatherResponse,
-    WeatherData,
-    LocationInfo,
-    CurrentWeather,
-    TemperatureInfo,
-    WindInfo,
     CacheInfo,
+    CurrentWeather,
+    LocationInfo,
+    TemperatureInfo,
+    WeatherData,
+    WeatherHistoryResponse,
+    WeatherResponse,
+    WeatherSnapshotItem,
+    WindInfo,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _convert_openweather_to_weatherdata(
-    raw: dict,
-    now: datetime,
-) -> WeatherData:
-    """
-    把 OpenWeatherMap 返回的原始 JSON 转成标准 WeatherData
-    """
+def _convert_openweather_to_weatherdata(raw: dict, now: datetime) -> WeatherData:
     coord = raw["coord"]
     weather0 = raw["weather"][0]
     main = raw["main"]
@@ -91,11 +84,7 @@ def _convert_openweather_to_weatherdata(
         expirationMinutes=settings.weather_expiration_minutes,
     )
 
-    return WeatherData(
-        location=location,
-        current=current,
-        cacheInfo=cache_info,
-    )
+    return WeatherData(location=location, current=current, cacheInfo=cache_info)
 
 
 class WeatherService:
@@ -109,82 +98,32 @@ class WeatherService:
         self.backup_client = backup_client
         self.session = session
 
-    # ---------- 缓存 & 快照工具方法 ----------
+    @staticmethod
+    def _normalize_city(city: str) -> str:
+        return city.strip()
 
     async def _get_cache(self, city: str) -> WeatherData | None:
-        """
-        从 weather_cache 表获取有效缓存：
-        - city 匹配
-        - cached_at + expiration_minutes > now
-        """
         now = datetime.now(timezone.utc)
-
-        stmt = (
-            select(WeatherCache)
-            .where(WeatherCache.city == city)
-            .limit(1)
-        )
-        result = await self.session.execute(stmt)
-        row: WeatherCache | None = result.scalar_one_or_none()
-
+        stmt = select(WeatherCache).where(WeatherCache.city == city).limit(1)
+        row = (await self.session.execute(stmt)).scalar_one_or_none()
         if row is None:
             return None
 
-        expire_at = row.cached_at + timedelta(
-            minutes=row.expiration_minutes
-        )
+        expire_at = row.cached_at + timedelta(minutes=row.expiration_minutes)
         if expire_at <= now:
-            # 已过期，当作没命中（后面可以扩展成“stale cache”兜底）
             return None
 
-        # row.weather_data 是用 mode="json" 序列化后的 dict，可以直接解析回 WeatherData
-        return WeatherData.model_validate(row.weather_data)
+        data = WeatherData.model_validate(row.weather_data)
 
-    async def _upsert_cache(
-        self,
-        city: str,
-        provider: str,
-        data: WeatherData,
-    ) -> None:
-        """
-        更新 / 插入 weather_cache：
-        - 如果 city 已存在，就覆盖 provider / weather_data / 时间等
-        """
+        # 以 DB 列为准（避免 JSON 里时间漂移）
+        data.cacheInfo.cachedAt = row.cached_at
+        data.cacheInfo.updatedAt = row.updated_at
+        data.cacheInfo.isValid = True
+        data.cacheInfo.expirationMinutes = row.expiration_minutes
+        return data
+
+    async def _persist_snapshot_and_cache(self, city: str, provider: str, data: WeatherData) -> None:
         now = datetime.now(timezone.utc)
-        weather_json = data.model_dump(mode="json")
-
-        stmt = pg_insert(WeatherCache).values(
-            city=city,
-            provider=provider,
-            weather_data=weather_json,
-            cached_at=now,
-            updated_at=now,
-            expiration_minutes=settings.weather_expiration_minutes,
-        )
-
-        stmt = stmt.on_conflict_do_update(
-            index_elements=[WeatherCache.city],
-            set_={
-                "provider": stmt.excluded.provider,
-                "weather_data": stmt.excluded.weather_data,
-                "cached_at": stmt.excluded.cached_at,
-                "updated_at": stmt.excluded.updated_at,
-                "expiration_minutes": stmt.excluded.expiration_minutes,
-            },
-        )
-
-        await self.session.execute(stmt)
-        await self.session.commit()
-
-    async def _save_snapshot(
-        self,
-        city: str,
-        provider: str,
-        data: WeatherData,
-    ) -> None:
-        """
-        写入 weather_snapshot 表：存一份完整历史快照
-        """
         weather_json = data.model_dump(mode="json")
 
         snapshot = WeatherSnapshot.from_weather_data(
@@ -193,29 +132,41 @@ class WeatherService:
             data_time_unix=data.current.dataTime,
             weather_data=weather_json,
         )
-        self.session.add(snapshot)
-        await self.session.commit()
 
-    # ---------- 对外主方法：按城市获取天气 ----------
+        upsert_stmt = pg_insert(WeatherCache).values(
+            city=city,
+            provider=provider,
+            weather_data=weather_json,
+            cached_at=now,
+            updated_at=now,
+            expiration_minutes=settings.weather_expiration_minutes,
+        ).on_conflict_do_update(
+            index_elements=[WeatherCache.city],
+            set_={
+                "provider": provider,
+                "weather_data": weather_json,
+                "cached_at": now,
+                "updated_at": now,
+                "expiration_minutes": settings.weather_expiration_minutes,
+            },
+        )
+
+        try:
+            self.session.add(snapshot)
+            await self.session.execute(upsert_stmt)
+            await self.session.commit()  # commit 内部会 flush :contentReference[oaicite:1]{index=1}
+        except Exception:
+            await self.session.rollback()  # 失败必须 rollback，否则 session 进入“半回滚”状态 :contentReference[oaicite:2]{index=2}
+            raise
 
     async def get_weather_by_city(self, city: str) -> WeatherResponse:
         now = datetime.now(timezone.utc)
+        city = self._normalize_city(city)
 
-        # 0）先查缓存
+        # 0）缓存
         try:
             cached = await self._get_cache(city)
-        except Exception as e:
-            logger.exception("查询天气缓存失败: %s", e)
-        else:
             if cached is not None:
-                # 命中缓存，直接返回
-                cached.cacheInfo.cachedAt = now
-                # updatedAt 保持为上次更新时间
-                cached.cacheInfo.isValid = True
-                cached.cacheInfo.expirationMinutes = (
-                    settings.weather_expiration_minutes
-                )
-
                 return WeatherResponse(
                     success=True,
                     message="获取天气数据成功（缓存）",
@@ -223,33 +174,19 @@ class WeatherService:
                     data=cached,
                     timestamp=now,
                 )
+        except Exception as e:
+            logger.exception("查询天气缓存失败: %s", e)
 
-        # 1）缓存没命中：调用 OpenWeatherMap
+        # 1）主接口：OpenWeatherMap
         try:
             raw = await self.openweather_client.get_current_weather(city)
-        except httpx.HTTPError as e:
-            logger.exception("OpenWeatherMap 调用失败: %s", e)
-        else:
             data = _convert_openweather_to_weatherdata(raw, now)
 
-            # 保存快照 & 更新缓存，失败不影响对外返回
+            # 写入（失败不影响对外返回，但我们必须保证 session 不坏）
             try:
-                await self._save_snapshot(
-                    city=city,
-                    provider="openweathermap",
-                    data=data,
-                )
+                await self._persist_snapshot_and_cache(city, "openweathermap", data)
             except Exception as e:
-                logger.exception("保存 weather_snapshot 失败: %s", e)
-
-            try:
-                await self._upsert_cache(
-                    city=city,
-                    provider="openweathermap",
-                    data=data,
-                )
-            except Exception as e:
-                logger.exception("更新 weather_cache 失败: %s", e)
+                logger.exception("写入天气 snapshot/cache 失败: %s", e)
 
             return WeatherResponse(
                 success=True,
@@ -258,44 +195,65 @@ class WeatherService:
                 data=data,
                 timestamp=now,
             )
+        except httpx.HTTPError as e:
+            logger.exception("OpenWeatherMap 调用失败: %s", e)
 
-        # 2）OpenWeatherMap 挂了：尝试备用接口
+        # 2）备用接口
         try:
             backup_resp = await self.backup_client.get_weather(city)
             if backup_resp.success and backup_resp.data is not None:
-                try:
-                    await self._save_snapshot(
-                        city=city,
-                        provider=backup_resp.source or "backup",
-                        data=backup_resp.data,
-                    )
-                except Exception as e:
-                    logger.exception(
-                        "保存备用接口 weather_snapshot 失败: %s", e
-                    )
+                provider = backup_resp.source or "backup"
 
                 try:
-                    await self._upsert_cache(
-                        city=city,
-                        provider=backup_resp.source or "backup",
-                        data=backup_resp.data,
-                    )
+                    await self._persist_snapshot_and_cache(city, provider, backup_resp.data)
                 except Exception as e:
-                    logger.exception(
-                        "更新 weather_cache（备用接口）失败: %s", e
-                    )
+                    logger.exception("写入备用接口 snapshot/cache 失败: %s", e)
 
                 backup_resp.timestamp = now
-                backup_resp.source = backup_resp.source or "backup"
+                backup_resp.source = provider
                 return backup_resp
         except Exception as e:
             logger.exception("备用天气接口调用失败: %s", e)
 
-        # 3）主接口 + 备用接口都挂了 → 目前直接失败（之后可以加 stale cache 兜底）
         return WeatherResponse(
             success=False,
             message="无法从 OpenWeatherMap 和备用接口获取天气数据",
             source=None,
             data=None,
+            timestamp=now,
+        )
+
+    async def get_weather_history(self, city: str, limit: int = 20) -> WeatherHistoryResponse:
+        now = datetime.now(timezone.utc)
+        city = self._normalize_city(city)
+        limit = max(1, min(limit, 200))
+
+        stmt = (
+            select(WeatherSnapshot)
+            .where(WeatherSnapshot.city == city)
+            .order_by(WeatherSnapshot.data_time.desc())
+            .limit(limit)
+        )
+        rows = (await self.session.execute(stmt)).scalars().all()
+
+        items: list[WeatherSnapshotItem] = []
+        for r in rows:
+            items.append(
+                WeatherSnapshotItem(
+                    id=r.id,
+                    city=r.city,
+                    provider=r.provider,
+                    dataTime=r.data_time,
+                    createdAt=r.created_at,
+                    data=WeatherData.model_validate(r.weather_data),
+                )
+            )
+
+        return WeatherHistoryResponse(
+            success=True,
+            message="获取历史天气快照成功",
+            city=city,
+            count=len(items),
+            items=items,
             timestamp=now,
         )

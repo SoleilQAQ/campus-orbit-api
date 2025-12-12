@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from pydantic import BaseModel
 
@@ -63,3 +63,25 @@ class WeatherResponse(BaseModel):
     source: Optional[str] = None
     data: Optional[WeatherData] = None
     timestamp: datetime
+
+
+# -------- 新增：历史快照 --------
+
+class WeatherSnapshotItem(BaseModel):
+    id: int
+    city: str
+    provider: str
+    dataTime: datetime
+    createdAt: datetime
+    data: "WeatherData"
+
+
+class WeatherHistoryResponse(BaseModel):
+    success: bool
+    message: str
+    city: str
+    count: int
+    items: List[WeatherSnapshotItem]
+    timestamp: datetime
+
+# WeatherSnapshotItem.model_rebuild()

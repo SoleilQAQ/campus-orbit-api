@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python (3.14 pinned by project)
+        run: uv python install
+
+      - name: Install deps (dev)
+        run: uv sync --dev --frozen
+
+      - name: Run unit tests (no DB)
+        run: uv run --frozen pytest -q -m "not integration"
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: campus_orbit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d campus_orbit_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/campus_orbit_test
+      OPENWEATHER_API_KEY: dummy
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python (3.14 pinned by project)
+        run: uv python install
+
+      - name: Install deps (dev)
+        run: uv sync --dev --frozen
+
+      - name: Apply migrations
+        run: uv run --frozen alembic upgrade head
+
+      - name: Run integration tests
+        run: uv run --frozen pytest -q -m "integration"
