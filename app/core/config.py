@@ -30,23 +30,11 @@ class Settings(BaseSettings):
     )
 
     # ==== 教务系统相关配置 ====
-    jwxt_base_url: str = Field(
-        "https://ysjw.sdufe.edu.cn:8081",  # 强智默认地址，你可以在 .env 里改
-        alias="JWXT_BASE_URL",
-    )
-    # 是否忽略教务系统的 SSL 证书错误（证书过期时临时用）
-    jwxt_insecure_ssl: bool = Field(
-        True,
-        alias="JWXT_INSECURE_SSL",
-    )
-    jwxt_connect_timeout: float = Field(
-        10.0,
-        alias="JWXT_CONNECT_TIMEOUT",
-    )
-    jwxt_read_timeout: float = Field(
-        20.0,
-        alias="JWXT_READ_TIMEOUT",
-    )
+    academic_base_url: str = Field(..., alias="ACADEMIC_BASE_URL")
+    academic_insecure_ssl: bool = Field(True, alias="ACADEMIC_INSECURE_SSL")
+    academic_connect_timeout: float = Field(10.0, alias="ACADEMIC_CONNECT_TIMEOUT")
+    academic_read_timeout: float = Field(20.0, alias="ACADEMIC_READ_TIMEOUT")
+
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,4 +1,4 @@
-# app/services/jwxt_service.py
+# app/services/academic_service.py
 from __future__ import annotations
 
 from typing import Tuple
@@ -6,7 +6,7 @@ from typing import Tuple
 import httpx
 
 from app.core.config import settings
-from app.schemas.jwxt import JwxtUserProfile
+from app.schemas.academic import JwxtUserProfile
 
 
 class JwxtService:

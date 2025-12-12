@@ -1,4 +1,4 @@
-# app/schemas/jwxt.py
+# app/schemas/academic.py
 from pydantic import BaseModel
 from datetime import datetime
 

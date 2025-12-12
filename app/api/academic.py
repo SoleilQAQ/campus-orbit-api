@@ -1,7 +1,7 @@
-# app/api/jwxt.py
+# app/api/academic.py
 from fastapi import APIRouter
-from app.schemas.jwxt import JwxtLoginRequest, JwxtLoginResponse
-from app.services.jwxt_service import JwxtService
+from app.schemas.academic import JwxtLoginRequest, JwxtLoginResponse
+from app.services.academic_service import JwxtService
 
 router = APIRouter(prefix="/api/jwxt", tags=["jwxt"])
 
