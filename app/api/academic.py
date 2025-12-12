@@ -1,23 +1,28 @@
 # app/api/academic.py
-from fastapi import APIRouter
-from app.schemas.academic import JwxtLoginRequest, JwxtLoginResponse
-from app.services.academic_service import JwxtService
+from __future__ import annotations
 
-router = APIRouter(prefix="/api/jwxt", tags=["jwxt"])
+from fastapi import APIRouter, Depends, Request
+
+from app.schemas.academic import AcademicLoginRequest
+from app.services.academic_service import AcademicService, get_academic_service
+
+router = APIRouter(prefix="/api/academic", tags=["academic"])
 
 
-@router.post("/login", response_model=JwxtLoginResponse)
-async def jwxt_login(body: JwxtLoginRequest) -> JwxtLoginResponse:
-    """
-    教务系统登录入口（后端统一）：
-    - 未来会做两件事：
-      1. 调用教务系统登录
-      2. 登录成功后，拉取个人信息并同步到本地数据库
-    """
-    service = JwxtService()
-    ok, msg = await service.login(body.username, body.password)
+@router.get("/health")
+async def academic_health(
+    request: Request,
+    service: AcademicService = Depends(get_academic_service),
+):
+    rid = getattr(request.state, "request_id", None)
+    return await service.health(request_id=rid)
 
-    return JwxtLoginResponse(
-        success=ok,
-        message=msg,
-    )
+
+@router.post("/login")
+async def academic_login(
+    request: Request,
+    body: AcademicLoginRequest,
+    service: AcademicService = Depends(get_academic_service),
+):
+    rid = getattr(request.state, "request_id", None)
+    return await service.login(body.username, body.password, request_id=rid)

@@ -1,105 +1,93 @@
 # app/services/academic_service.py
 from __future__ import annotations
 
-from typing import Tuple
+import logging
+from datetime import datetime, timezone
+from typing import Optional, Dict, Any
 
-import httpx
+from app.clients.academic_client import AcademicClient
+from app.core.session_store import academic_session_store
 
-from app.core.config import settings
-from app.schemas.academic import JwxtUserProfile
+logger = logging.getLogger(__name__)
 
 
-class JwxtService:
-    """
-    教务系统后端访问封装：
-    - 负责发 HTTP 请求（httpx）
-    - 负责处理 SSL 验证开关（证书过期时可以临时关闭）
-    - 以后会加：登录、获取个人信息、成绩、课表等
-    """
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
+
+class AcademicService:
     def __init__(self) -> None:
-        self.base_url = settings.jwxt_base_url.rstrip("/")
+        self.client = AcademicClient()
 
-    def _build_client(self) -> httpx.AsyncClient:
-        """
-        每次请求创建一个 httpx.AsyncClient。
-        后续如果你想搞更高性能，可以改成在 lifespan 里复用单例 client。
-        """
-        timeout = httpx.Timeout(
-            settings.jwxt_connect_timeout,
-            read=settings.jwxt_read_timeout,
-        )
-        client = httpx.AsyncClient(
-            base_url=self.base_url,
-            timeout=timeout,
-            verify=not settings.jwxt_insecure_ssl,  # 证书过期时这里会是 False
-            follow_redirects=False,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 Chrome/143.0.0.0 Safari/537.36"
-                ),
-                "Accept": (
-                    "text/html,application/xhtml+xml,application/xml;"
-                    "q=0.9,image/avif,image/webp,image/apng,*/*;"
-                    "q=0.8,application/signed-exchange;v=b3;q=0.7"
-                ),
-                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            },
-        )
-        return client
+    async def health(self, request_id: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            r = await self.client.fetch_health(request_id=request_id)
 
-    async def login(self, username: str, password: str) -> Tuple[bool, str]:
-        """
-        教务系统登录（雏形版）：
-        - 先搭好 HTTP 请求和 SSL 设置
-        - 真正加密逻辑 / HTML 判断成功与否，后面单独一步搞
+            reachable = 200 <= r.status_code < 500  # 302/403 也算“能连上”
+            msg = "教务系统可达" if reachable else "教务系统不可达"
 
-        返回: (是否成功, 提示消息)
-        """
-        # TODO: 这里需要根据你现有的 JwxtCrypto(Dart 版) 或 Python 脚本实现加密:
-        # encoded = jwxt_crypto_encode(username, password)
-        encoded = "TODO-implement-encoded"  # 占位符
+            return {
+                "success": reachable,
+                "message": msg,
+                "source": "api",
+                "data": {
+                    "reachable": reachable,
+                    "statusCode": r.status_code,
+                    "url": r.url,
+                    "redirectLocation": r.location,
+                    "htmlSample": r.text_sample,
+                    "contentLength": r.content_length,
+                    "contentType": r.content_type
+                },
+                "timestamp": _utc_now_iso(),
+            }
+        except Exception as e:
+            logger.exception("教务系统 health 探测失败: %s", e)
+            return {
+                "success": False,
+                "message": f"无法连接教务系统: {e}",
+                "source": None,
+                "data": None,
+                "timestamp": _utc_now_iso(),
+            }
 
-        form_data = {
-            "userAccount": username,
-            "userPassword": "",
-            "encoded": encoded,
-        }
+    async def login(self, username: str, password: str, request_id: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            r = await self.client.login(username=username, password=password, request_id=request_id)
 
-        async with self._build_client() as client:
-            try:
-                resp = await client.post("/jsxsd/xk/LoginToXk", data=form_data)
+            if not r.success:
+                return {
+                    "success": False,
+                    "message": "登录失败（可能需要 encoded 加密参数）",
+                    "source": "api",
+                    "data": {
+                        "statusCode": r.status_code,
+                        "redirectLocation": r.location,
+                        "htmlSample": r.text_sample,
+                    },
+                    "timestamp": _utc_now_iso(),
+                }
 
-            except httpx.RequestError as exc:
-                # 网络错误（DNS、连接失败等）
-                return False, f"无法连接教务系统: {exc}"
+            s = await academic_session_store.create(username=username, cookies=r.cookies)
+            return {
+                "success": True,
+                "message": "登录成功",
+                "source": "api",
+                "data": {
+                    "sessionId": s.session_id,
+                    "expiresAt": s.expires_at.isoformat().replace("+00:00", "Z"),
+                },
+                "timestamp": _utc_now_iso(),
+            }
+        except Exception as e:
+            logger.exception("教务系统 login 失败: %s", e)
+            return {
+                "success": False,
+                "message": f"无法连接教务系统: {e}",
+                "source": None,
+                "data": None,
+                "timestamp": _utc_now_iso(),
+            }
 
-        # 下面的逻辑是骨架，需要你根据实际返回页面调整
-        if resp.status_code >= 500:
-            return False, f"教务系统服务异常: HTTP {resp.status_code}"
-
-        # TODO: 根据 resp.headers["Location"] 或 resp.text 判断是否登录成功
-        # 比如：
-        # - 如果 Location 指向 /jsxsd/framework/xsMain.jsp 则视为成功
-        # - 如果页面包含 “用户名或密码错误” 字样则视为失败
-        # 这里先返回一个占位信息，下一步我们再专门写“登录判断 + 抓包调试”。
-
-        return False, "登录逻辑尚未实现（TODO）"
-
-    async def fetch_profile(self) -> JwxtUserProfile:
-        """
-        获取个人信息页面并解析为 JwxtUserProfile
-
-        这里先放一个 TODO，等登录逻辑稳定后，我们再专门写 HTML 解析。
-        """
-        # TODO: 实现抓取 /jsxsd/grxx/xsxx?xx=1 之类的个人信息页面
-        # 然后用正则 / lxml / selectolax 解析出：
-        # - 学号
-        # - 姓名
-        # - 学院
-        # - 专业
-        # - 班级
-        # - 入学年份
-        # - 学习层次
-        raise NotImplementedError("fetch_profile 尚未实现")
+def get_academic_service() -> AcademicService:
+    return AcademicService()
