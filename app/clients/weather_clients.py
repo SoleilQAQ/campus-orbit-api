@@ -6,7 +6,7 @@ from typing import Dict, Any
 import httpx
 
 from app.core.config import settings
-from app.models.weather_schemas import WeatherResponse, WeatherData
+from app.schemas.weather_schemas import WeatherResponse
 
 
 class OpenWeatherClient:

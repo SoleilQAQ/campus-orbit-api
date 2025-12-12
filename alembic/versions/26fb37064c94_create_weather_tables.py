@@ -1,8 +1,8 @@
-"""sync weather indexes
+"""create weather tables
 
-Revision ID: 9f8fc78437ca
-Revises: 8a0af2d5c7ac
-Create Date: 2025-12-12 21:37:02.721617
+Revision ID: 26fb37064c94
+Revises: 
+Create Date: 2025-12-13 02:07:20.430000
 
 """
 from typing import Sequence, Union
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '9f8fc78437ca'
-down_revision: Union[str, Sequence[str], None] = '8a0af2d5c7ac'
+revision: str = '26fb37064c94'
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

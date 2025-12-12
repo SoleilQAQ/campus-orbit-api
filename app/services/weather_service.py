@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.weather_clients import BackupWeatherClient, OpenWeatherClient
 from app.core.config import settings
 from app.models.weather_db import WeatherCache, WeatherSnapshot
-from app.models.weather_schemas import (
+from app.schemas.weather_schemas import (
     CacheInfo,
     CurrentWeather,
     LocationInfo,
