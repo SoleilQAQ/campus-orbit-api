@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.weather_clients import BackupWeatherClient, OpenWeatherClient
-from app.core.db import get_session
+from app.db.session import get_session
 from app.schemas.weather_schemas import WeatherHistoryResponse, WeatherResponse
 from app.services.weather_service import WeatherService
 

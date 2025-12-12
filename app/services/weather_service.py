@@ -7,10 +7,12 @@ from datetime import datetime, timezone, timedelta
 import httpx
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.weather_clients import BackupWeatherClient, OpenWeatherClient
 from app.core.config import settings
+from app.db.session import AsyncSessionLocal
 from app.models.weather_db import WeatherCache, WeatherSnapshot
 from app.schemas.weather_schemas import (
     CacheInfo,
@@ -105,7 +107,18 @@ class WeatherService:
     async def _get_cache(self, city: str) -> WeatherData | None:
         now = datetime.now(timezone.utc)
         stmt = select(WeatherCache).where(WeatherCache.city == city).limit(1)
-        row = (await self.session.execute(stmt)).scalar_one_or_none()
+
+        try:
+            row = (await self.session.execute(stmt)).scalar_one_or_none()
+        except (DBAPIError, SQLAlchemyError) as e:
+            logger.exception("查询天气缓存失败，视为无缓存: %s", e)
+            # 关键：把 session 从 failed 状态拉回来
+            try:
+                await self.session.rollback()
+            except Exception:
+                logger.warning("查询缓存失败后 rollback 也失败，忽略", exc_info=True)
+            return None
+
         if row is None:
             return None
 
@@ -114,15 +127,21 @@ class WeatherService:
             return None
 
         data = WeatherData.model_validate(row.weather_data)
-
-        # 以 DB 列为准（避免 JSON 里时间漂移）
         data.cacheInfo.cachedAt = row.cached_at
         data.cacheInfo.updatedAt = row.updated_at
         data.cacheInfo.isValid = True
         data.cacheInfo.expirationMinutes = row.expiration_minutes
         return data
 
-    async def _persist_snapshot_and_cache(self, city: str, provider: str, data: WeatherData) -> None:
+    async def _persist_snapshot_and_cache(
+            self, city: str, provider: str, data: WeatherData
+    ) -> None:
+        """
+        使用独立的短生命周期 Session，将天气快照 + 缓存写入数据库。
+
+        这样可以避免与当前请求的 AsyncSession 之间产生并发冲突
+        （asyncpg: "another operation is in progress"）。
+        """
         now = datetime.now(timezone.utc)
         weather_json = data.model_dump(mode="json")
 
@@ -133,31 +152,37 @@ class WeatherService:
             weather_data=weather_json,
         )
 
-        upsert_stmt = pg_insert(WeatherCache).values(
-            city=city,
-            provider=provider,
-            weather_data=weather_json,
-            cached_at=now,
-            updated_at=now,
-            expiration_minutes=settings.weather_expiration_minutes,
-        ).on_conflict_do_update(
-            index_elements=[WeatherCache.city],
-            set_={
-                "provider": provider,
-                "weather_data": weather_json,
-                "cached_at": now,
-                "updated_at": now,
-                "expiration_minutes": settings.weather_expiration_minutes,
-            },
+        upsert_stmt = (
+            pg_insert(WeatherCache)
+            .values(
+                city=city,
+                provider=provider,
+                weather_data=weather_json,
+                cached_at=now,
+                updated_at=now,
+                expiration_minutes=settings.weather_expiration_minutes,
+            )
+            .on_conflict_do_update(
+                index_elements=[WeatherCache.city],
+                set_={
+                    "provider": provider,
+                    "weather_data": weather_json,
+                    "cached_at": now,
+                    "updated_at": now,
+                    "expiration_minutes": settings.weather_expiration_minutes,
+                },
+            )
         )
 
-        try:
-            self.session.add(snapshot)
-            await self.session.execute(upsert_stmt)
-            await self.session.commit()  # commit 内部会 flush :contentReference[oaicite:1]{index=1}
-        except Exception:
-            await self.session.rollback()  # 失败必须 rollback，否则 session 进入“半回滚”状态 :contentReference[oaicite:2]{index=2}
-            raise
+        # ✅ 独立 Session，内部事务保证原子性
+        async with AsyncSessionLocal() as session:
+            try:
+                async with session.begin():  # 自动 flush + commit / rollback
+                    session.add(snapshot)
+                    await session.execute(upsert_stmt)
+            except Exception:
+                # 这里的异常只影响“是否写入快照/缓存”，不会把外面请求的 session 弄坏
+                raise
 
     async def get_weather_by_city(self, city: str) -> WeatherResponse:
         now = datetime.now(timezone.utc)
@@ -234,18 +259,20 @@ class WeatherService:
             .order_by(WeatherSnapshot.data_time.desc())
             .limit(limit)
         )
-        rows = (await self.session.execute(stmt)).scalars().all()
+
+        result = await self.session.execute(stmt)
+        rows = result.scalars().all()
 
         items: list[WeatherSnapshotItem] = []
-        for r in rows:
+        for snap in rows:
             items.append(
                 WeatherSnapshotItem(
-                    id=r.id,
-                    city=r.city,
-                    provider=r.provider,
-                    dataTime=r.data_time,
-                    createdAt=r.created_at,
-                    data=WeatherData.model_validate(r.weather_data),
+                    id=snap.id,
+                    city=snap.city,
+                    provider=snap.provider,
+                    dataTime=snap.data_time,
+                    createdAt=snap.created_at,
+                    data=WeatherData.model_validate(snap.weather_data),
                 )
             )
 

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import get_session
+from app.db.session import get_session
 
 router = APIRouter(prefix="/api/health", tags=["health"])
 
