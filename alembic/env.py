@@ -7,7 +7,8 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from dotenv import load_dotenv
-
+from app.db.base import Base
+from app.models import weather_db
 # 读 .env（本地更顺手）
 load_dotenv()
 
@@ -21,10 +22,7 @@ if not db_url:
 
 config.set_main_option("sqlalchemy.url", db_url)
 
-# 这里先用你现有 Base（目前 Base 定义在 weather_db.py 里）
-from app.models.weather_db import Base  # noqa
 target_metadata = Base.metadata
-
 
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")

@@ -7,11 +7,7 @@ from typing import Any, Dict
 from sqlalchemy import BigInteger, Integer, String, Text, TIMESTAMP, func, Index, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
-
-class Base(DeclarativeBase):
-    """SQLAlchemy ORM Base"""
-    pass
+from app.db.base import Base
 
 
 class WeatherSnapshot(Base):

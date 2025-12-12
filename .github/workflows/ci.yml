@@ -64,8 +64,26 @@ jobs:
       - name: Install deps (dev)
         run: uv sync --dev
 
+      - name: Print DATABASE_URL (masked)
+        run: |
+          python -c "import os; print('DATABASE_URL set:', bool(os.getenv('DATABASE_URL')))"
+
       - name: Apply migrations
         run: uv run alembic upgrade head
+
+      - name: Apply migrations
+        run: |
+          set -euxo pipefail
+          uv run alembic upgrade head
+
+      - name: Debug DB schema (tables + alembic_version)
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          PGPASSWORD=postgres psql -h localhost -U postgres -d campus_orbit_test -c "\dt"
+          PGPASSWORD=postgres psql -h localhost -U postgres -d campus_orbit_test -c "select * from alembic_version;"
+
 
       - name: Run integration tests
         run: uv run pytest -q -m "integration"
