@@ -58,7 +58,7 @@ class AcademicService:
             if not r.success:
                 return {
                     "success": False,
-                    "message": "登录失败（可能需要 encoded 加密参数）",
+                    "message": "登录失败（可能是账号密码错误、需要验证码，或教务系统登录参数变更）",
                     "source": "api",
                     "data": {
                         "statusCode": r.status_code,

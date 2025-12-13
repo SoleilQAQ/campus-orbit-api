@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any
 import httpx
 
 from app.core.config import settings
+from app.utils.academic_crypto import encode as encode_credentials
 
 
 @dataclass(frozen=True)
@@ -123,7 +124,7 @@ class AcademicClient:
             form = {
                 "userAccount": username,
                 "userPassword": password,
-                "encoded": "",  # TODO
+                "encoded": encode_credentials(username, password),
             }
             resp = await client.post("/jsxsd/xk/LoginToXk", data=form)
 
@@ -131,7 +132,18 @@ class AcademicClient:
             sample = (resp.text or "")[:200]
             cookies = {k: v for k, v in client.cookies.items()}
 
-        ok = resp.status_code in (302, 303) and (location is None or "LoginToXk" not in location)
+        # 判定是否登录成功：
+        # 1) 教务系统通常会 302/303 跳转到主框架页；失败时经常仍停留在登录相关路径
+        # 2) 不跟随跳转（follow_redirects=False），所以以 Location + 状态码做启发式判断
+        login_markers = ("LoginToXk", "Logon.do", "login", "Login")
+        loc_lower = (location or "").lower()
+        ok = resp.status_code in (302, 303) and (not loc_lower or not any(m.lower() in loc_lower for m in login_markers))
+
+        # 有些学校不跳转，直接返回含主页面/框架的 HTML（少见，但存在）
+        if not ok and resp.status_code == 200:
+            t = (resp.text or "").lower()
+            if "xsmain" in t or "xs_main" in t or "framework" in t:
+                ok = True
 
         return AcademicLoginResult(
             success=ok,
