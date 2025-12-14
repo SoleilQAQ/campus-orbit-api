@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from dotenv import load_dotenv
 from app.db.base import Base
-from app.models import weather_db
+from app.models import weather_models
+from app.models import academic_models
 # 读 .env（本地更顺手）
 load_dotenv()
 

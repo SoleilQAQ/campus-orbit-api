@@ -1,64 +1,117 @@
-# app/core/session_store.py
 from __future__ import annotations
 
-import asyncio
-import secrets
+import json
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
+
+from app.core.config import settings
+from app.core.redis import get_redis
 
 
-def _utc_now() -> datetime:
+def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-@dataclass
+@dataclass(frozen=True)
 class AcademicSession:
     session_id: str
-    cookies: Dict[str, str]
     username: str
-    expires_at: datetime
+    cookies: Dict[str, str]
     created_at: datetime
+    expires_at: datetime
     last_seen_at: datetime
 
 
-class InMemoryAcademicSessionStore:
-    def __init__(self, ttl_minutes: int = 60) -> None:
-        self._ttl = timedelta(minutes=ttl_minutes)
-        self._lock = asyncio.Lock()
-        self._sessions: Dict[str, AcademicSession] = {}
+class RedisAcademicSessionStore:
+    """
+    sessionId 由 Header: X-Academic-Session 传入
 
-    async def create(self, username: str, cookies: Dict[str, str]) -> AcademicSession:
-        async with self._lock:
-            sid = secrets.token_urlsafe(32)
-            now = _utc_now()
-            s = AcademicSession(
-                session_id=sid,
-                cookies=cookies,
-                username=username,
-                created_at=now,
-                last_seen_at=now,
-                expires_at=now + self._ttl,
-            )
-            self._sessions[sid] = s
-            return s
+    - absolute_ttl：绝对过期（默认12h）
+    - idle_ttl：空闲过期（默认30min，访问会续期）
+    """
 
-    async def get(self, session_id: str) -> Optional[AcademicSession]:
-        async with self._lock:
-            s = self._sessions.get(session_id)
-            if not s:
-                return None
-            if s.expires_at <= _utc_now():
-                self._sessions.pop(session_id, None)
-                return None
-            # touch
-            s.last_seen_at = _utc_now()
-            return s
+    def __init__(
+        self,
+        *,
+        key_prefix: str = "academic:sess:",
+        absolute_ttl_minutes: int | None = None,
+        idle_ttl_minutes: int | None = None,
+    ) -> None:
+        self._redis = get_redis()
+        self._key_prefix = key_prefix
+        self._abs_min = absolute_ttl_minutes or settings.academic_session_absolute_ttl_minutes
+        self._idle_min = idle_ttl_minutes or settings.academic_session_idle_ttl_minutes
 
-    async def delete(self, session_id: str) -> None:
-        async with self._lock:
-            self._sessions.pop(session_id, None)
+    def _key(self, sid: str) -> str:
+        return f"{self._key_prefix}{sid}"
+
+    async def create(self, *, username: str, cookies: Dict[str, str]) -> AcademicSession:
+        now = utc_now()
+        sid = uuid.uuid4().hex
+        expires_at = now + timedelta(minutes=self._abs_min)
+
+        payload = {
+            "session_id": sid,
+            "username": username,
+            "cookies": cookies,
+            "created_at": now.isoformat(),
+            "expires_at": expires_at.isoformat(),
+            "last_seen_at": now.isoformat(),
+        }
+
+        await self._redis.set(self._key(sid), json.dumps(payload, ensure_ascii=False), ex=self._idle_min * 60)
+
+        return AcademicSession(
+            session_id=sid,
+            username=username,
+            cookies=cookies,
+            created_at=now,
+            expires_at=expires_at,
+            last_seen_at=now,
+        )
+
+    async def get(self, sid: str) -> Optional[AcademicSession]:
+        if not sid:
+            return None
+
+        raw = await self._redis.get(self._key(sid))
+        if not raw:
+            return None
+
+        try:
+            data = json.loads(raw)
+            created_at = datetime.fromisoformat(data["created_at"])
+            expires_at = datetime.fromisoformat(data["expires_at"])
+            last_seen_at = datetime.fromisoformat(data["last_seen_at"])
+            cookies = dict(data.get("cookies") or {})
+            username = str(data.get("username") or "")
+        except Exception:
+            await self._redis.delete(self._key(sid))
+            return None
+
+        now = utc_now()
+        if now >= expires_at:
+            await self._redis.delete(self._key(sid))
+            return None
+
+        # 滑动续期
+        data["last_seen_at"] = now.isoformat()
+        await self._redis.set(self._key(sid), json.dumps(data, ensure_ascii=False), ex=self._idle_min * 60)
+
+        return AcademicSession(
+            session_id=sid,
+            username=username,
+            cookies=cookies,
+            created_at=created_at,
+            expires_at=expires_at,
+            last_seen_at=now,
+        )
+
+    async def delete(self, sid: str) -> None:
+        if sid:
+            await self._redis.delete(self._key(sid))
 
 
-# 单例（单机/单 worker 可用；多 worker 要换 Redis）
-academic_session_store = InMemoryAcademicSessionStore(ttl_minutes=60)
+academic_session_store = RedisAcademicSessionStore()

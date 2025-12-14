@@ -70,4 +70,23 @@ class Settings(BaseSettings):
         validation_alias="ACADEMIC_USER_AGENT",
     )
 
+    # 方式A：（推荐）
+    #   - 无 ACL 用户：redis://:password@host:6379/0
+    #   - 有 ACL 用户：redis://username:password@host:6379/0
+    redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
+
+    # 方式B：分字段（避免密码里有特殊字符导致 URL 解析麻烦）
+    redis_host: str = Field(default="127.0.0.1", validation_alias="REDIS_HOST")
+    redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
+    redis_db: int = Field(default=0, validation_alias="REDIS_DB")
+    redis_username: str | None = Field(default=None, validation_alias="REDIS_USERNAME")  # Redis 6+ ACL 可用
+    redis_password: str | None = Field(default=None, validation_alias="REDIS_PASSWORD")
+
+    redis_ssl: bool = Field(default=False, validation_alias="REDIS_SSL")  # 需要 TLS 就 true（等同 rediss://）
+    redis_decode_responses: bool = Field(default=True, validation_alias="REDIS_DECODE_RESPONSES")
+
+  # ========= Academic session TTL =========
+    academic_session_absolute_ttl_minutes: int = Field(default=12 * 60, validation_alias="ACADEMIC_SESSION_ABSOLUTE_TTL_MINUTES")
+    academic_session_idle_ttl_minutes: int = Field(default=30, validation_alias="ACADEMIC_SESSION_IDLE_TTL_MINUTES")
+
 settings = Settings()

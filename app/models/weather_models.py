@@ -1,4 +1,4 @@
-# app/models/weather_db.py
+# app/models/weather_models.py
 from __future__ import annotations
 
 from datetime import datetime, timezone

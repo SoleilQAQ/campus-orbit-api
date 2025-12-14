@@ -1,4 +1,4 @@
-# app/schemas/academic.py
+# app/schemas/academic_schemas.py
 from pydantic import BaseModel, Field
 
 

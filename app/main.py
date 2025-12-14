@@ -1,10 +1,11 @@
 # app/main.py
 from contextlib import asynccontextmanager
 
-import httpx # httpx/aiohttp/request
-from fastapi import FastAPI # django/flask/Sanic/Robyn
+import httpx  # httpx/aiohttp/request
+from fastapi import FastAPI  # django/flask/Sanic/Robyn
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.weather import router as weather_router
 from app.api.health import router as health_router
@@ -29,16 +30,24 @@ app = FastAPI(
 )
 
 # middleware
-app.middleware("http")(request_id_middleware)  # :contentReference[oaicite:4]{index=4}
+app.middleware("http")(request_id_middleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 # exception handlers
-app.add_exception_handler(StarletteHTTPException, http_exception_handler)  # :contentReference[oaicite:5]{index=5}
-app.add_exception_handler(RequestValidationError, validation_exception_handler)  # :contentReference[oaicite:6]{index=6}
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 # routers
 app.include_router(weather_router)
 app.include_router(health_router)
 app.include_router(academic_router)
+
 
 @app.get("/health")
 async def health():

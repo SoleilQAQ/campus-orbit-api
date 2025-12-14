@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.weather_client import BackupWeatherClient, OpenWeatherClient
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
-from app.models.weather_db import WeatherCache, WeatherSnapshot
+from app.models.weather_models import WeatherCache, WeatherSnapshot
 from app.schemas.weather_schemas import (
     CacheInfo,
     CurrentWeather,
@@ -174,7 +174,7 @@ class WeatherService:
             )
         )
 
-        # ✅ 独立 Session，内部事务保证原子性
+        #  独立 Session，内部事务保证原子性
         async with AsyncSessionLocal() as session:
             try:
                 async with session.begin():  # 自动 flush + commit / rollback
