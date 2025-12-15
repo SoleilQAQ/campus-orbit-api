@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from app.db.base import Base
 from app.models import weather_models
 from app.models import academic_models
+from app.platform import models
 # 读 .env（本地更顺手）
 load_dotenv()
 

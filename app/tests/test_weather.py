@@ -36,7 +36,7 @@ async def test_weather_ok(client, monkeypatch):
 
     monkeypatch.setattr(WeatherService, "_persist_snapshot_and_cache", fake_persist)
 
-    # 3) 调你的接口
+    # 3) 调的接口
     r = await client.get("/api/weather", params={"city": "beijing"})
     assert r.status_code == 200
     body = r.json()

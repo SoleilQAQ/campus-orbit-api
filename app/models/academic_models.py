@@ -17,8 +17,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-# ✅ 必须是你项目唯一的 Base（确保 Alembic target_metadata 能看到）
-from app.db.base import Base  # 按你项目实际路径调整
+#  必须是项目唯一的 Base（确保 Alembic target_metadata 能看到）
+from app.db.base import Base  # 按项目实际路径调整
 
 
 def utc_now() -> datetime:

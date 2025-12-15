@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.weather import router as weather_router
 from app.api.health import router as health_router
 from app.api.academic import router as academic_router
+from app.platform.routes import router as platform_router
 from app.core.errors import http_exception_handler, validation_exception_handler
 from app.middlewares.request_id import request_id_middleware
 
@@ -47,7 +48,7 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.include_router(weather_router)
 app.include_router(health_router)
 app.include_router(academic_router)
-
+app.include_router(platform_router)
 
 @app.get("/health")
 async def health():

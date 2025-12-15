@@ -7,8 +7,8 @@ ENV UV_DEFAULT_INDEX="https://mirrors.aliyun.com/pypi/simple/"
 # 兼容旧习惯的话，也可以顺手配一下：
 ENV UV_INDEX_URL="https://mirrors.aliyun.com/pypi/simple/"
 
-# 2. 如果你还想保留官方 PyPI 当备选，可以用 UV_INDEX / extra-index-url，
-#   但对你这种「主要是加速 & 避开 GFW」场景，单个国内镜像就够用
+# 2. 如果还想保留官方 PyPI 当备选，可以用 UV_INDEX / extra-index-url，
+#   但对这种「主要是加速 & 避开 GFW」场景，单个国内镜像就够用
 
 # 3. 再去 sync
 COPY pyproject.toml uv.lock ./

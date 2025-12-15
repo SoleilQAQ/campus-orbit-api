@@ -305,7 +305,7 @@ class AcademicClient:
         table_kv: dict[str, str] = {}
         all_text = ""
 
-        HEADER_BAD_VALUES = {"与本人关系", "关系", "称谓", "姓名"}  # 可按你学校页面再补充
+        HEADER_BAD_VALUES = {"与本人关系", "关系", "称谓", "姓名"}  # 可按学校页面再补充
 
         if BeautifulSoup is not None:
             soup = BeautifulSoup(html, "html.parser")
@@ -400,7 +400,7 @@ class AcademicClient:
             cookies: Dict[str, str],
             request_id: Optional[str] = None,
     ) -> dict[str, Any]:
-        # 先用你原来的路径；如果站点不同，再加候选（不算改结构）
+        # 先用原来的路径；如果站点不同，再加候选（不算改结构）
         candidates = [
             ("/jsxsd/grxx/xsxx", None),
             ("/jsxsd/framework/xsMain_new.jsp", {"t1": "1"}),  # 有些学校个人信息在首页框架里

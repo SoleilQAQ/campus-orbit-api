@@ -17,7 +17,7 @@ class OpenWeatherClient:
 
     async def get_current_weather(self, city: str) -> Dict[str, Any]:
         if not self.api_key:
-            # 这里你可以换成自定义异常
+            # 这里可以换成自定义异常
             raise RuntimeError("OPENWEATHER_API_KEY 未配置")
 
         params = {
@@ -35,7 +35,7 @@ class OpenWeatherClient:
 
 class BackupWeatherClient:
     """
-    调用你的备用接口 http://weather.skkk.uno/api/weather?city=...
+    调用的备用接口 http://weather.skkk.uno/api/weather?city=...
     这个接口返回的数据结构已经是 WeatherResponse 的格式
     """
 

@@ -55,14 +55,14 @@ class AcademicRepo:
     # ========= Core Fix: ensure_user =========
     async def ensure_user(self, *, student_id: str, account: str | None = None) -> AcademicUser:
         """
-        ✅ 确保 academic_user 存在（修复你遇到的 FK 报错）
+         确保 academic_user 存在（修复遇到的 FK 报错）
         - semesters/grades/schedule 在 me 之前调用也不会炸
         """
         obj = await self.session.get(AcademicUser, student_id)
         if obj is None:
             obj = AcademicUser(student_id=student_id, account=account or student_id)
             self.session.add(obj)
-            await self.session.flush()  # ✅ 保证 FK 立刻可用
+            await self.session.flush()  #  保证 FK 立刻可用
             return obj
 
         if account and obj.account != account:
@@ -204,7 +204,7 @@ class AcademicRepo:
             existing.fetched_at = utc_now()
             await self.session.flush()
 
-            # ✅ 课程表建议“全量覆盖”，避免旧课残留
+            #  课程表建议“全量覆盖”，避免旧课残留
             await self.session.execute(
                 delete(AcademicScheduleCourse).where(AcademicScheduleCourse.schedule_id == existing.id)
             )

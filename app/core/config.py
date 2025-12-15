@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     academic_read_timeout: float = Field(
         20.0, validation_alias="ACADEMIC_READ_TIMEOUT"
     )
-    # 建议：默认 False；需要临时绕过证书才设 True（尤其你未来可能切回 https）
+    # 建议：默认 False；需要临时绕过证书才设 True（尤其未来可能切回 https）
     academic_insecure_skip_verify: bool = Field(
         default=False,
         validation_alias="ACADEMIC_INSECURE_SSL",

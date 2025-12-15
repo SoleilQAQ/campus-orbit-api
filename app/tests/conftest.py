@@ -29,7 +29,7 @@ async def client():
     提供一个可用于 async 测试的 HTTP 客户端：
     - 触发 FastAPI lifespan（startup/shutdown）
     - 覆盖 get_session，避免多个请求/协程复用同一个 Session
-    - 仍然使用你原来的 ASGITransport 写法
+    - 仍然使用原来的 ASGITransport 写法
     """
     # 覆盖 FastAPI 中的 DB 依赖
     app.dependency_overrides[get_session] = _override_get_session
