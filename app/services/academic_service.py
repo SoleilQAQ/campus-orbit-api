@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import logging
 from typing import Optional, Dict, Any
 
 from fastapi import Depends, HTTPException
@@ -8,11 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients.academic_client import AcademicClient
 from app.core.session_store import academic_session_store, AcademicSession
 from app.repositories.academic_repo import AcademicRepo
-
+from datetime import datetime, timezone
 
 from app.db.session import get_session
 
+logger = logging.getLogger(__name__)
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 class AcademicService:
     def __init__(self, db: AsyncSession) -> None:
@@ -33,12 +36,40 @@ class AcademicService:
         }
 
     async def login(self, *, username: str, password: str, request_id: Optional[str] = None) -> Dict[str, Any]:
-        r = await self.client.login(username=username, password=password, request_id=request_id)
-        if not r.success:
-            raise HTTPException(status_code=401, detail={"reason": "LOGIN_FAILED", **r.__dict__})
+        try:
+            r = await self.client.login(username=username, password=password, request_id=request_id)
+            if not r.success:
+                return {
+                    "success": False,
+                    "message": "登录失败",
+                    "data": {
+                        "statusCode": r.status_code,
+                        "redirectLocation": r.location,
+                        "htmlSample": r.text_sample,
+                    },
+                    "timestamp": _utc_now_iso(),
+                }
 
-        session = await academic_session_store.create(username=username, cookies=r.cookies)
-        return {"success": True, "sessionId": session.session_id, "status_code": r.status_code, "location": r.location}
+            session = await academic_session_store.create(username=username, cookies=r.cookies)
+            return {
+                "success": True,
+                "message": "登录成功",
+                "data": {
+                    "sessionId": session.session_id,
+                    "expiresAt": session.expires_at.isoformat().replace("+00:00", "Z"),
+                    "statusCode": r.status_code,
+                    "location": r.location,
+                },
+                "timestamp": _utc_now_iso(),
+            }
+        except Exception as e:
+            logger.exception("教务系统 login 失败: %s", e)
+            return {
+                "success": False,
+                "message": f"无法连接教务系统: {e}",
+                "data": None,
+                "timestamp": _utc_now_iso(),
+            }
 
     async def logout(self, *, session_id: str) -> Dict[str, Any]:
         await academic_session_store.delete(session_id)

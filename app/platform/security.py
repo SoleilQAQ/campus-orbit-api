@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 import secrets
 
 from jose import jwt
+import hashlib
 from passlib.context import CryptContext
 
 from .settings import platform_settings
@@ -11,12 +12,23 @@ from .settings import platform_settings
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-def hash_password(pw: str) -> str:
-    return pwd_context.hash(pw)
+def _bcrypt_input(raw: str) -> str:
+    """
+    bcrypt only uses first 72 BYTES.
+    To avoid truncation issues (and weird unicode byte-length surprises),
+    we pre-hash with SHA-256 to a fixed-size ASCII string.
+    """
+    raw_bytes = raw.encode("utf-8")
+    digest = hashlib.sha256(raw_bytes).hexdigest()  # 64 chars ASCII
+    return digest
 
 
-def verify_password(pw: str, pw_hash: str) -> bool:
-    return pwd_context.verify(pw, pw_hash)
+def hash_password(raw: str) -> str:
+    return pwd_context.hash(_bcrypt_input(raw))
+
+
+def verify_password(raw: str, hashed: str) -> bool:
+    return pwd_context.verify(_bcrypt_input(raw), hashed)
 
 
 def create_access_token(subject: str, role: str) -> str:

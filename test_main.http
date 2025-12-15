@@ -19,20 +19,25 @@ Content-Type: application/json
 
 ###
 GET http://127.0.0.1:8000/api/academic/semesters
-X-Academic-Session: 69efc6d911874d5a9ed89d4410867eb9
+X-Academic-Session: aea7fea5b0b847a383e8c37c681f9c78
 Accept: application/json
 
 ###
 GET http://127.0.0.1:8000/api/academic/grades?semester=2024-2025-1
-X-Academic-Session: 69efc6d911874d5a9ed89d4410867eb9
+X-Academic-Session: aea7fea5b0b847a383e8c37c681f9c78
 Accept: application/json
 
 ###
 GET http://127.0.0.1:8000/api/academic/me
-X-Academic-Session: 69efc6d911874d5a9ed89d4410867eb9
+X-Academic-Session: aea7fea5b0b847a383e8c37c681f9c78
 Accept: application/json
 
 ###
 GET http://localhost:8000/api/academic/schedule
-X-Academic-Session: 5e31fe7b47d9490386fa6efc6b509ea7
+X-Academic-Session: aea7fea5b0b847a383e8c37c681f9c78
+Accept: application/json
+
+###
+GET http://localhost:8000/api/admin/users?role=admin
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZTE3ZmEyZS05ZTdlLTQ0NTAtYWNlOS1jMWM5NTUzNDJjMjgiLCJyb2xlIjoiYWRtaW4iLCJpYXQiOjE3NjU3NjQzODAsImV4cCI6MTc2NTc3MTU4MCwianRpIjoiYjcxMWI2MjE4YjczY2YxMDljOWM3NjAwNDFkZWM5MGIifQ.IJtoTy9w9wDw39BsUy42RSJb2_PLmrcqtIrt4FKRE1w
 Accept: application/json

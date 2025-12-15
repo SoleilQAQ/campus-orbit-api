@@ -22,5 +22,9 @@ class PlatformSettings(BaseSettings):
     # 天气默认开关
     weather_enabled_default: bool = True
 
+    # 初始管理员（用于 init_admin.py 脚本）
+    bootstrap_admin_username: str = "admin"
+    bootstrap_admin_password: str = "admin123"
+
 
 platform_settings = PlatformSettings()

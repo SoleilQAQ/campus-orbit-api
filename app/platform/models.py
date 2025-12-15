@@ -71,3 +71,27 @@ class AiAnalysisHistory(Base):
     output_text: Mapped[str] = mapped_column(Text, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class AiConfig(Base):
+    """AI 服务配置（全局单例）"""
+    __tablename__ = "ai_config"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # 是否启用 AI 功能
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    
+    # AI API 配置
+    api_url: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    api_token: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    model: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    
+    # 生成参数
+    temperature: Mapped[float] = mapped_column(default=0.7, nullable=False)
+    max_tokens: Mapped[int] = mapped_column(default=2000, nullable=False)
+    
+    # 默认 prompt 模板
+    prompt_template: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

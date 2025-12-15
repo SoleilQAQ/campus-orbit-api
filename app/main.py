@@ -13,6 +13,7 @@ from app.api.academic import router as academic_router
 from app.platform.routes import router as platform_router
 from app.core.errors import http_exception_handler, validation_exception_handler
 from app.middlewares.request_id import request_id_middleware
+from app.middlewares.logging import LoggingMiddleware
 
 
 @asynccontextmanager
@@ -32,6 +33,7 @@ app = FastAPI(
 
 # middleware
 app.middleware("http")(request_id_middleware)
+app.add_middleware(LoggingMiddleware)  # 请求/响应日志
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins
