@@ -10,6 +10,7 @@ from .repo import PlatformRepo
 from .security import (
     hash_password,
     verify_password,
+    verify_password_async,
     create_access_token,
     create_refresh_token,
 )
@@ -42,7 +43,7 @@ class AuthService:
             return {"ok": False, "msg": "管理员账号不存在"}
         if not u.is_enabled:
             return {"ok": False, "msg": "该管理员已被禁用"}
-        if not u.password_hash or not verify_password(password, u.password_hash):
+        if not u.password_hash or not await verify_password_async(password, u.password_hash):
             return {"ok": False, "msg": "密码错误"}
 
         access = create_access_token(subject=str(u.id), role="admin")
