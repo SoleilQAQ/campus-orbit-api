@@ -23,7 +23,7 @@ class TokenData(BaseModel):
     roles: list[str]
     accessToken: str = Field(..., alias="accessToken")
     refreshToken: str = Field(..., alias="refreshToken")
-    expires: str
+    expires: int  # 毫秒时间戳，前端更容易处理
 
 class LoginResp(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -117,3 +117,75 @@ class CpuHistoryPoint(BaseModel):
     """CPU 历史数据点模型"""
     time: str
     usage: int = Field(..., ge=0, le=100)  # 0-100
+
+
+# -------- 天气配置模型 --------
+class WeatherProviderFieldMapping(BaseModel):
+    """天气提供商字段映射"""
+    temperature: str = "main.temp"
+    humidity: str = "main.humidity"
+    description: str = "weather[0].description"
+    icon: str = "weather[0].icon"
+    wind_speed: str = "wind.speed"
+    city: str = "name"
+
+
+class WeatherProviderConfig(BaseModel):
+    """天气提供商配置"""
+    id: str
+    name: str
+    enabled: bool = True
+    priority: int = 1
+    api_url: str
+    api_key: str = ""
+    field_mapping: WeatherProviderFieldMapping = Field(default_factory=WeatherProviderFieldMapping)
+    request_params: dict = Field(default_factory=dict)
+
+
+class WeatherFallbackData(BaseModel):
+    """天气备用数据"""
+    city: str = "北京"
+    temperature: float = 20.0
+    humidity: int = 50
+    description: str = "晴"
+
+
+class WeatherConfigData(BaseModel):
+    """天气配置数据"""
+    enabled: bool = True
+    providers: list[WeatherProviderConfig] = Field(default_factory=list)
+    fallback_data: Optional[WeatherFallbackData] = None
+    cache_minutes: int = 30
+    timeout_seconds: int = 10
+
+
+class WeatherConfigReq(BaseModel):
+    """天气配置请求"""
+    enabled: bool = True
+    providers: list[WeatherProviderConfig] = Field(default_factory=list)
+    fallback_data: Optional[WeatherFallbackData] = None
+    cache_minutes: int = 30
+    timeout_seconds: int = 10
+
+
+class WeatherTestReq(BaseModel):
+    """天气接口测试请求"""
+    provider_id: str
+    city: str
+
+
+class WeatherMappedData(BaseModel):
+    """映射后的天气数据"""
+    temperature: Optional[float] = None
+    humidity: Optional[int] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    wind_speed: Optional[float] = None
+    city: Optional[str] = None
+
+
+class WeatherTestResult(BaseModel):
+    """天气接口测试结果"""
+    raw_response: dict
+    mapped_data: WeatherMappedData
+    response_time_ms: int

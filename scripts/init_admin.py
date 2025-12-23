@@ -77,7 +77,7 @@ async def main() -> None:
 
     # If you have a platform Base for create_all (optional)
     try:
-        from app.platform.models.base import Base  # noqa: E402
+        from app.db.base import Base  # noqa: E402
     except Exception:
         Base = None  # type: ignore
 

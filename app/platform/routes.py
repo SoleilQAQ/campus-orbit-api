@@ -1,9 +1,12 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db_compat import get_db
-from .schemas import R, LoginReq, LoginResp, ToggleReq, WeatherBackupSetReq, AnalyzeReq, AiConfigReq
+from .schemas import (
+    R, LoginReq, LoginResp, ToggleReq, WeatherBackupSetReq, AnalyzeReq, AiConfigReq,
+    WeatherConfigReq, WeatherTestReq, WeatherMappedData, WeatherTestResult
+)
 from .repo import PlatformRepo
 from .services import AuthService, WeatherSwitchService, StudentService
 from .deps import get_current_user, require_role
@@ -122,6 +125,118 @@ async def admin_set_weather_backup(req: WeatherBackupSetReq, db: AsyncSession = 
     await svc.set_backup_payload(req.payload)
     await db.commit()
     return R(success=True, data=True)
+
+
+# -------- Admin: 天气配置 --------
+@router.get("/admin/weather/config")
+async def admin_get_weather_config(db: AsyncSession = Depends(get_db), _=Depends(require_role("admin"))):
+    """获取天气配置"""
+    repo = PlatformRepo(db)
+    cfg = await repo.get_or_create_weather_config()
+    await db.commit()
+    return R(success=True, data={
+        "enabled": cfg.enabled,
+        "providers": cfg.providers,
+        "fallback_data": cfg.fallback_data,
+        "cache_minutes": cfg.cache_minutes,
+        "timeout_seconds": cfg.timeout_seconds,
+    })
+
+
+@router.put("/admin/weather/config")
+async def admin_set_weather_config(req: WeatherConfigReq, db: AsyncSession = Depends(get_db), _=Depends(require_role("admin"))):
+    """更新天气配置"""
+    repo = PlatformRepo(db)
+    
+    # 转换 providers 为字典列表
+    providers_data = [p.model_dump() for p in req.providers]
+    fallback_data = req.fallback_data.model_dump() if req.fallback_data else None
+    
+    cfg = await repo.update_weather_config(
+        enabled=req.enabled,
+        providers=providers_data,
+        fallback_data=fallback_data,
+        cache_minutes=req.cache_minutes,
+        timeout_seconds=req.timeout_seconds,
+    )
+    await db.commit()
+    return R(success=True, data={
+        "enabled": cfg.enabled,
+        "providers": cfg.providers,
+        "fallback_data": cfg.fallback_data,
+        "cache_minutes": cfg.cache_minutes,
+        "timeout_seconds": cfg.timeout_seconds,
+    })
+
+
+@router.post("/admin/weather/test")
+async def admin_test_weather(
+    request: Request,
+    req: WeatherTestReq,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_role("admin"))
+):
+    """测试天气接口"""
+    import time
+    import httpx
+    from .weather_utils import map_weather_response
+    
+    repo = PlatformRepo(db)
+    cfg = await repo.get_or_create_weather_config()
+    
+    # 查找指定的 provider
+    provider = None
+    for p in cfg.providers:
+        if p.get("id") == req.provider_id:
+            provider = p
+            break
+    
+    if not provider:
+        return R(success=False, data=None, message=f"未找到提供商: {req.provider_id}")
+    
+    if not provider.get("api_url"):
+        return R(success=False, data=None, message="API URL 未配置")
+    
+    # 构建请求参数
+    params = dict(provider.get("request_params", {}))
+    params["q"] = req.city
+    
+    # 添加 API Key（如果有）
+    api_key = provider.get("api_key")
+    if api_key:
+        params["appid"] = api_key
+    
+    try:
+        start_time = time.time()
+        
+        async with httpx.AsyncClient(timeout=cfg.timeout_seconds) as client:
+            resp = await client.get(provider["api_url"], params=params)
+            
+            response_time_ms = int((time.time() - start_time) * 1000)
+            
+            if resp.status_code != 200:
+                return R(
+                    success=False,
+                    data={"status_code": resp.status_code, "response": resp.text[:500]},
+                    message=f"API 返回错误: {resp.status_code}"
+                )
+            
+            raw_data = resp.json()
+            
+            # 使用字段映射转换数据
+            field_mapping = provider.get("field_mapping", {})
+            mapped = map_weather_response(raw_data, field_mapping)
+            
+            return R(success=True, data={
+                "raw_response": raw_data,
+                "mapped_data": mapped,
+                "response_time_ms": response_time_ms,
+            })
+            
+    except httpx.TimeoutException:
+        return R(success=False, data=None, message="请求超时")
+    except Exception as e:
+        return R(success=False, data=None, message=f"请求失败: {str(e)}")
 
 
 # -------- Admin: AI 配置 --------
@@ -259,18 +374,25 @@ async def admin_system_cpu_history(minutes: int = Query(default=60, ge=1), _=Dep
     return R(success=True, data=data)
 
 
-# -------- Public: 天气接口（受开关控制）--------
+# -------- Public: 天气接口（受开关控制，无需登录）--------
 @router.get("/weather/current")
-async def weather_current(city: str = Query(..., min_length=1), db: AsyncSession = Depends(get_db), u=Depends(get_current_user)):
+async def weather_current(
+    request: Request,
+    city: str = Query(..., min_length=1),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取天气数据（公开接口，无需登录）"""
     svc = WeatherSwitchService(db)
     sw = await svc.get_switch()
     if not sw["enabled"]:
         raise HTTPException(status_code=503, detail="Weather API disabled by admin")
 
-    # 调用天气服务获取数据
+    # 使用全局共享的 HTTP 客户端（与 /api/weather 保持一致）
     from app.clients.weather_client import OpenWeatherClient, BackupWeatherClient
-    openweather_client = OpenWeatherClient()
-    backup_client = BackupWeatherClient()
+    
+    http_client = request.app.state.http_client
+    openweather_client = OpenWeatherClient(http_client)
+    backup_client = BackupWeatherClient(http_client)
     ws = weather_service.WeatherService(openweather_client, backup_client, db)
     result = await ws.get_weather_by_city(city)
     return R(success=result.success, data=result.data, message=result.message)

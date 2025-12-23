@@ -95,3 +95,27 @@ class AiConfig(Base):
     prompt_template: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class WeatherConfig(Base):
+    """天气服务配置（全局单例）"""
+    __tablename__ = "weather_config"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # 是否启用天气功能
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    
+    # 天气提供商配置列表（JSON 数组）
+    providers: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    
+    # 备用数据（当所有提供商都失败时返回）
+    fallback_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    
+    # 缓存时间（分钟）
+    cache_minutes: Mapped[int] = mapped_column(default=30, nullable=False)
+    
+    # 请求超时（秒）
+    timeout_seconds: Mapped[int] = mapped_column(default=10, nullable=False)
+
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

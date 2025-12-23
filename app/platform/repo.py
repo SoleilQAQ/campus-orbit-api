@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import PlatformUser, WeatherSwitch, AiPromptTemplate, AiAnalysisHistory, AiConfig
+from .models import PlatformUser, WeatherSwitch, AiPromptTemplate, AiAnalysisHistory, AiConfig, WeatherConfig
 
 
 class PlatformRepo:
@@ -409,3 +409,70 @@ class PlatformRepo:
                 "totalCourses": total_courses,  # 不重复的课程数
             },
         }
+
+    # -------- 天气配置相关方法 --------
+    async def get_or_create_weather_config(self) -> WeatherConfig:
+        """获取或创建天气配置（全局单例）"""
+        q = await self.db.execute(select(WeatherConfig).limit(1))
+        cfg = q.scalar_one_or_none()
+        if cfg:
+            return cfg
+        
+        # 创建默认配置
+        default_providers = [
+            {
+                "id": "openweathermap",
+                "name": "OpenWeatherMap",
+                "enabled": True,
+                "priority": 1,
+                "api_url": "https://api.openweathermap.org/data/2.5/weather",
+                "api_key": "",
+                "field_mapping": {
+                    "temperature": "main.temp",
+                    "humidity": "main.humidity",
+                    "description": "weather[0].description",
+                    "icon": "weather[0].icon",
+                    "wind_speed": "wind.speed",
+                    "city": "name"
+                },
+                "request_params": {
+                    "units": "metric",
+                    "lang": "zh_cn"
+                }
+            }
+        ]
+        
+        cfg = WeatherConfig(
+            enabled=True,
+            providers=default_providers,
+            fallback_data={
+                "city": "北京",
+                "temperature": 20,
+                "humidity": 50,
+                "description": "晴"
+            },
+            cache_minutes=30,
+            timeout_seconds=10,
+        )
+        self.db.add(cfg)
+        await self.db.flush()
+        return cfg
+
+    async def update_weather_config(
+        self,
+        *,
+        enabled: bool,
+        providers: list,
+        fallback_data: dict | None,
+        cache_minutes: int,
+        timeout_seconds: int,
+    ) -> WeatherConfig:
+        """更新天气配置"""
+        cfg = await self.get_or_create_weather_config()
+        cfg.enabled = enabled
+        cfg.providers = providers
+        cfg.fallback_data = fallback_data
+        cfg.cache_minutes = cache_minutes
+        cfg.timeout_seconds = timeout_seconds
+        await self.db.flush()
+        return cfg

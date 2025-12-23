@@ -53,6 +53,8 @@ class AuthService:
         await r.setex(f"auth:refresh:{refresh}", int(timedelta(days=platform_settings.refresh_token_days).total_seconds()), str(u.id))
 
         exp = datetime.now() + timedelta(minutes=platform_settings.access_token_minutes)
+        # 返回毫秒时间戳，前端更容易处理
+        expires_ms = int(exp.timestamp() * 1000)
         return {
             "ok": True,
             "data": {
@@ -60,7 +62,7 @@ class AuthService:
                 "roles": ["admin"],
                 "accessToken": access,
                 "refreshToken": refresh,
-                "expires": exp.strftime("%Y/%m/%d %H:%M:%S"),
+                "expires": expires_ms,
             },
         }
 
@@ -105,6 +107,8 @@ class AuthService:
         await r.setex(f"auth:refresh:{refresh}", int(timedelta(days=platform_settings.refresh_token_days).total_seconds()), str(u.id))
 
         exp = datetime.now() + timedelta(minutes=platform_settings.access_token_minutes)
+        # 返回毫秒时间戳，前端更容易处理
+        expires_ms = int(exp.timestamp() * 1000)
         return {
             "ok": True,
             "data": {
@@ -112,7 +116,7 @@ class AuthService:
                 "roles": ["student"],
                 "accessToken": access,
                 "refreshToken": refresh,
-                "expires": exp.strftime("%Y/%m/%d %H:%M:%S"),
+                "expires": expires_ms,
             },
         }
 

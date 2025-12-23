@@ -18,6 +18,7 @@ from app.schemas.weather_schemas import (
     CacheInfo,
     CurrentWeather,
     LocationInfo,
+    PrecipitationInfo,
     TemperatureInfo,
     WeatherData,
     WeatherHistoryResponse,
@@ -63,6 +64,24 @@ def _convert_openweather_to_weatherdata(raw: dict, now: datetime) -> WeatherData
         gust=wind.get("gust"),
     )
 
+    # 解析降雨信息
+    rain_data = raw.get("rain")
+    rain_info = None
+    if rain_data:
+        rain_info = PrecipitationInfo(
+            h1=rain_data.get("1h"),
+            h3=rain_data.get("3h"),
+        )
+
+    # 解析降雪信息
+    snow_data = raw.get("snow")
+    snow_info = None
+    if snow_data:
+        snow_info = PrecipitationInfo(
+            h1=snow_data.get("1h"),
+            h3=snow_data.get("3h"),
+        )
+
     current = CurrentWeather(
         main=weather0["main"],
         description=weather0["description"],
@@ -77,6 +96,10 @@ def _convert_openweather_to_weatherdata(raw: dict, now: datetime) -> WeatherData
         sunrise=sys.get("sunrise", 0),
         sunset=sys.get("sunset", 0),
         dataTime=dt,
+        rain=rain_info,
+        snow=snow_info,
+        seaLevel=main.get("sea_level"),
+        groundLevel=main.get("grnd_level"),
     )
 
     cache_info = CacheInfo(
